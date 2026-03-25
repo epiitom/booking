@@ -264,12 +264,12 @@ export default function App() {
   const allUnpaid = Object.entries(bookings).flatMap(([date, bks]: any) => (bks as any[]).filter((b: any) => b.status === "unpaid").map((b: any) => ({ ...b, date })));
 
   return (
-    <div style={{ fontFamily: "'Syne', sans-serif", background: "#080a0e", minHeight: "100dvh", color: "#e8e4de" }}>
+    <div style={{ fontFamily: "'Space Grotesk', sans-serif", background: "#080a0e", minHeight: "100dvh", color: "#e8e4de" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
         body{background:#080a0e;overflow-x:hidden}
-        input,select,button,textarea{font-family:'Syne',sans-serif}
+        input,select,button,textarea{font-family:'Space Grotesk',sans-serif}
         input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
         input[type=range]{-webkit-appearance:none;appearance:none;background:transparent}
         input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:#1e2535}
@@ -604,8 +604,38 @@ function CourtCard({ court, session, inventory, settings, onStart, onPause, onRe
 /* ── BOOKINGS TAB ── */
 function BookingsTab({ selectedDate, setSelectedDate, bookings, courts, courtSessions, settings, allUnpaid, onNewBooking, onBookingClick, onMarkPaid, onAssign }: any) {
   const dayBks = bookings[selectedDate] || [];
-  const paid = dayBks.filter((b: any) => b.status === "paid").reduce((a: number, b: any) => a + (b.amount || 0), 0);
-  const unpaid = dayBks.filter((b: any) => b.status === "unpaid").reduce((a: number, b: any) => a + (b.amount || 0), 0);
+
+  // UI helpers (search/filter) for better booking UX.
+  const [query, setQuery] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState<"all" | "paid" | "unpaid">("all");
+  const [assignFilter, setAssignFilter] = useState<"all" | "assigned" | "unassigned">("all");
+
+  const q = query.trim().toLowerCase();
+  const filteredDayBks = dayBks.filter((b: any) => {
+    const haystack = [b.name, b.phone, b.assignedCourtName, b.startTime, b.endTime]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const matchesQuery = !q || haystack.includes(q);
+    const matchesPayment = paymentFilter === "all" ? true : b.status === paymentFilter;
+    const matchesAssign = assignFilter === "all" ? true : assignFilter === "assigned" ? !!b.assignedCourtId : !b.assignedCourtId;
+    return matchesQuery && matchesPayment && matchesAssign;
+  });
+
+  const paid = filteredDayBks.filter((b: any) => b.status === "paid").reduce((a: number, b: any) => a + (b.amount || 0), 0);
+  const unpaid = filteredDayBks.filter((b: any) => b.status === "unpaid").reduce((a: number, b: any) => a + (b.amount || 0), 0);
+
+  const otherUnpaidAll = allUnpaid.filter((b: any) => b.date !== selectedDate);
+  const filteredOtherUnpaid = otherUnpaidAll.filter((b: any) => {
+    const haystack = [b.name, b.phone, b.assignedCourtName, b.startTime, b.endTime]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const matchesQuery = !q || haystack.includes(q);
+    const matchesPayment = paymentFilter === "all" ? true : b.status === paymentFilter;
+    const matchesAssign = assignFilter === "all" ? true : assignFilter === "assigned" ? !!b.assignedCourtId : !b.assignedCourtId;
+    return matchesQuery && matchesPayment && matchesAssign;
+  });
 
   return (
     <div className="fade-in">
@@ -619,6 +649,44 @@ function BookingsTab({ selectedDate, setSelectedDate, bookings, courts, courtSes
         </button>
       </div>
 
+      {/* Search + Filters */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", marginBottom: 20 }}>
+        <div style={{ flex: 1, minWidth: 260, background: "#1a2030", borderRadius: 999, border: "1.5px solid #1e2a40", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 12, color: "#4a5568", fontWeight: 800 }}>Search</span>
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Name, phone, court, time..."
+            aria-label="Search bookings"
+            style={{ width: "100%", background: "transparent", border: "none", outline: "none", color: "#e8e4de", fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {(["all", "paid", "unpaid"] as const).map((k: any) => (
+            <button
+              key={k}
+              aria-label={`Payment filter: ${k}`}
+              onClick={() => setPaymentFilter(k)}
+              style={{ padding: "10px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800, cursor: "pointer", border: "1.5px solid", background: paymentFilter === k ? (k === "paid" ? "#00e5a018" : k === "unpaid" ? "#f5a62318" : "#e8e4de22") : "#1a2030", color: paymentFilter === k ? (k === "paid" ? "#00e5a0" : k === "unpaid" ? "#f5a623" : "#e8e4de") : "#4a5568", borderColor: paymentFilter === k ? (k === "paid" ? "#00e5a044" : k === "unpaid" ? "#f5a62344" : "#1a2030") : "#1a2030" }}
+            >
+              {k === "all" ? "All" : k === "paid" ? "Paid" : "Unpaid"}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {(["all", "assigned", "unassigned"] as const).map((k: any) => (
+            <button
+              key={k}
+              aria-label={`Assignment filter: ${k}`}
+              onClick={() => setAssignFilter(k)}
+              style={{ padding: "10px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800, cursor: "pointer", border: "1.5px solid", background: assignFilter === k ? "#00e5a018" : "#1a2030", color: assignFilter === k ? "#00e5a0" : "#4a5568", borderColor: assignFilter === k ? "#00e5a044" : "#1a2030" }}
+            >
+              {k === "all" ? "Any Court" : k === "assigned" ? "Assigned" : "Unassigned"}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Date strip */}
       <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 20 }}>
         {getDateRange().map(d => (
@@ -630,7 +698,7 @@ function BookingsTab({ selectedDate, setSelectedDate, bookings, courts, courtSes
 
       {/* Stats row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
-        {[{ label: "Bookings", val: String(dayBks.length), color: "#e8e4de" }, { label: "Collected", val: fmt(paid), color: "#00e5a0" }, { label: "Pending", val: fmt(unpaid), color: unpaid > 0 ? "#f5a623" : "#4a5568" }].map(t => (
+        {[{ label: "Bookings", val: String(filteredDayBks.length), color: "#e8e4de" }, { label: "Collected", val: fmt(paid), color: "#00e5a0" }, { label: "Pending", val: fmt(unpaid), color: unpaid > 0 ? "#f5a623" : "#4a5568" }].map(t => (
           <div key={t.label} style={{ background: "#0c0f17", border: "1px solid #1a2030", borderRadius: 12, padding: "14px 16px" }}>
             <div style={{ fontSize: 10, color: "#4a5568", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{t.label}</div>
             <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, color: t.color }}>{t.val}</div>
@@ -639,15 +707,17 @@ function BookingsTab({ selectedDate, setSelectedDate, bookings, courts, courtSes
       </div>
 
       {/* Booking list */}
-      {dayBks.length === 0 ? (
+      {filteredDayBks.length === 0 ? (
         <div style={{ textAlign: "center", padding: "60px", color: "#2a3548" }}>
           <div style={{ fontSize: 42, marginBottom: 12 }}>📅</div>
-          <div style={{ fontSize: 13 }}>No bookings for {fmtDateShort(selectedDate)}</div>
+          <div style={{ fontSize: 13 }}>
+            {q ? `No results for "${query.trim()}"` : `No bookings for ${fmtDateShort(selectedDate)}`}
+          </div>
           <button onClick={onNewBooking} style={{ marginTop: 16, background: "#1a2030", border: "1px solid #1e2a40", color: "#e8e4de", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Add Booking</button>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {dayBks.sort((a: any, b: any) => timeToMins(a.startTime || "0:00") - timeToMins(b.startTime || "0:00")).map((b: any) => {
+          {filteredDayBks.sort((a: any, b: any) => timeToMins(a.startTime || "0:00") - timeToMins(b.startTime || "0:00")).map((b: any) => {
             const assigned = b.assignedCourtId;
             const activeSession = assigned ? Object.values(courtSessions).find((s: any) => s.courtId === assigned && !s.endTime) : null;
             return (
@@ -678,10 +748,10 @@ function BookingsTab({ selectedDate, setSelectedDate, bookings, courts, courtSes
       )}
 
       {/* All unpaid */}
-      {allUnpaid.filter((b: any) => b.date !== selectedDate).length > 0 && (
+      {paymentFilter !== "paid" && filteredOtherUnpaid.length > 0 && (
         <div style={{ marginTop: 28 }}>
           <div style={{ fontSize: 12, color: "#4a5568", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Other Unpaid Bookings</div>
-          {allUnpaid.filter((b: any) => b.date !== selectedDate).map((b: any) => (
+          {filteredOtherUnpaid.map((b: any) => (
             <div key={b.id} style={{ background: "#0c0f17", border: "1px solid #f5a62322", borderRadius: 10, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{b.name}</div>
@@ -768,14 +838,46 @@ function BookingSheet({ settings, courts, bookedSlots, selectedDate, onClose, on
   const selectedEndM = timeToMins(endTime);
   const isTimeValid = selectedStartM >= openM && selectedEndM <= closeM && selectedEndM > selectedStartM;
 
+  const phoneDigits = phone.replace(/\D/g, "");
+  const phoneLooksShort = phone.trim().length > 0 && phoneDigits.length > 0 && phoneDigits.length < 10;
+  const nameMissing = !name.trim();
+
   return (
     <SheetOverlay onClose={onClose}>
       <div style={{ padding: "0 24px 16px", borderBottom: "1px solid #1a2030", fontSize: 18, fontWeight: 800 }}>New Booking</div>
       <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18, maxHeight: "65dvh", overflowY: "auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <FieldBlock label="Customer Name"><input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Rahul Sharma" style={iStyle} /></FieldBlock>
-          <FieldBlock label="Phone"><input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="9876543210" style={iStyle} /></FieldBlock>
+          <FieldBlock label="Customer Name">
+            <input
+              autoFocus
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Rahul Sharma"
+              aria-label="Customer name"
+              aria-invalid={nameMissing}
+              style={iStyle}
+            />
+          </FieldBlock>
+          <FieldBlock label="Phone">
+            <input
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="9876543210"
+              aria-label="Phone number"
+              aria-invalid={phoneLooksShort}
+              style={iStyle}
+            />
+          </FieldBlock>
         </div>
+
+        {(nameMissing || phoneLooksShort) && (
+          <div role="alert" style={{ fontSize: 11, color: nameMissing ? "#f5a623" : "#f59e0b", marginTop: -6 }}>
+            {nameMissing ? "Customer name is required." : null}
+            {phoneLooksShort ? (nameMissing ? " " : "") + "Phone number seems too short (enter at least 10 digits)." : null}
+          </div>
+        )}
+
         <FieldBlock label="Amount (₹)"><input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={{ ...iStyle, maxWidth: 200 }} /></FieldBlock>
         <FieldBlock label="Time Slot (Manual)">
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
